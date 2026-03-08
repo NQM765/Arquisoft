@@ -1,6 +1,11 @@
-# Prototype1 - Pruebas de Login con API (Windows)
+# Prototype1 - Pruebas de Login con API
 
 Repositorio con cliente Unity y backend Node.js/Express para autenticacion.
+
+## Quick Links
+
+- [Windows](#1-preparar-backend-windows)
+- [Linux](#1-preparar-backend-linux)
 
 ## Estructura
 
@@ -9,12 +14,23 @@ Repositorio con cliente Unity y backend Node.js/Express para autenticacion.
 
 ## Requisitos
 
+### Windows
+
 - Windows 10/11
 - PowerShell
 - Node.js 18+ (incluye `npm`)
 - Unity Hub + version de Unity del proyecto
 
-## 1) Preparar backend
+### Linux
+
+- Linux (cualquier distribucion)
+- Terminal
+- Node.js 18+ (incluye `npm`)
+- Unity Hub + version de Unity del proyecto
+
+---
+
+## 1) Preparar backend (Windows)
 
 1. Abre PowerShell.
 2. Ve a la carpeta del backend:
@@ -37,7 +53,7 @@ cmd /c npm.cmd run start
 
 Debe quedar corriendo en `http://localhost:3000`.
 
-## 2) Probar API rapido desde terminal
+## 2) Probar API rapido desde terminal (Windows)
 
 Abre otra ventana de PowerShell (deja el backend corriendo en la primera).
 
@@ -65,6 +81,66 @@ Invoke-RestMethod -Method Get -Uri 'http://localhost:3000/auth/me' -Headers @{ A
 ```
 
 Esperado: `success: true` y `user` con `id` y `username`.
+
+---
+
+## 1) Preparar backend (Linux)
+
+1. Abre una terminal.
+2. Ve a la carpeta del backend:
+
+```bash
+cd /home/javier-giraldo/Documents/Arquisoft/backend
+```
+
+3. Sincroniza base de datos con Prisma:
+
+```bash
+npx prisma db push
+```
+
+4. Inicia el backend:
+
+```bash
+npm run start
+```
+
+Debe quedar corriendo en `http://localhost:3000`.
+
+## 2) Probar API rapido desde terminal (Linux)
+
+Abre otra terminal (deja el backend corriendo en la primera).
+
+### Registro
+
+```bash
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user_test_1","password":"123456"}'
+```
+
+Si ese usuario ya existe, cambia `user_test_1` por otro nombre.
+
+### Login
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user_test_1","password":"123456"}'
+```
+
+Debe devolver un JSON con `accessToken`. Guarda el token.
+
+### Validar token (`/auth/me`)
+
+```bash
+curl -X GET http://localhost:3000/auth/me \
+  -H "Authorization: Bearer TU_ACCESS_TOKEN"
+```
+
+Reemplaza `TU_ACCESS_TOKEN` con el token del login. Esperado: `success: true` y `user` con `id` y `username`.
+
+---
 
 ## 3) Probar flujo en Unity
 
@@ -102,9 +178,18 @@ Ejemplo real:
 
 ## Troubleshooting
 
+### Windows
+
 - Error `npm.ps1 cannot be loaded because running scripts is disabled`:
   usa `cmd /c npm.cmd ...` como en este README.
 - `Error interno del servidor` al registrar:
   ejecuta de nuevo `cmd /c npx prisma db push`.
+- `Token invalido o expirado` en `/auth/me`:
+  vuelve a hacer login y usa el token nuevo.
+
+### Linux
+
+- `Error interno del servidor` al registrar:
+  ejecuta de nuevo `npx prisma db push`.
 - `Token invalido o expirado` en `/auth/me`:
   vuelve a hacer login y usa el token nuevo.
