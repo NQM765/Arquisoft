@@ -52,6 +52,8 @@ My project/[Ll]ogs/
 My project/UserSettings/
 My project/MemoryCaptures/
 My project/Recordings/
+My project/.vsconfig
+My project/.vs/
 
 # Keep assets, scripts, scenes, packages, project settings.
 !My project/Assets/
@@ -74,3 +76,9 @@ backend/dev.db-wal
 # Repo extras (local artifacts)
 # -----------------------------
 *.log
+
+# -----------------------------
+# Auth server
+# -----------------------------
+auth-server/.env
+auth-server/node_modules/
