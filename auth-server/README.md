@@ -98,13 +98,6 @@ npm run matchmaking
 # Matchmaking server en ws://localhost:3001
 ```
 
-> Los dos servidores deben estar corriendo simultáneamente para que el juego funcione.
-
-Para correrlos con un solo comando:
-
-```bash
-npm run dev:all
-```
 
 ---
 
