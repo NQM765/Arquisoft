@@ -1,11 +1,17 @@
 using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using NativeWebSocket; // instala: com.endel.nativewebsocket
+using NativeWebSocket;
+using TMPro;
+using UnityEngine.UIElements; // instala: com.endel.nativewebsocket
 
 public class MatchmakingManager : MonoBehaviour
 {
     public string matchmakingUrl = "ws://localhost:3001";
+
+    public TextMeshProUGUI findMatchText;
+    public GameObject findMatchButton;
+    public GameObject cancelButton;
 
     private WebSocket _ws;
     private PendingMatch _pendingMatch;
@@ -35,6 +41,7 @@ public class MatchmakingManager : MonoBehaviour
 
     public async void FindMatch()
     {
+        findMatchButton.SetActive(false);
         if (string.IsNullOrEmpty(AuthManager.AccessToken))
         {
             Debug.LogError("No hay token. El usuario no está autenticado.");
@@ -65,6 +72,9 @@ public class MatchmakingManager : MonoBehaviour
                 case "queued":
                     Debug.Log("En cola, buscando oponente...");
                     // Aquí actualiza tu UI
+                    findMatchButton.SetActive(false);
+                    findMatchText.enabled = true;
+                    cancelButton.SetActive(true);
                     break;
                 case "match_found":
                     _pendingMatch = JsonUtility.FromJson<PendingMatch>(raw);
@@ -82,6 +92,9 @@ public class MatchmakingManager : MonoBehaviour
 
     public void CancelSearch()
     {
+        findMatchText.enabled = false;
+        findMatchButton.SetActive(true);
+        cancelButton.SetActive(false);
         if (_ws != null)
             _ws.SendText("{\"type\":\"cancel_match\"}");
     }
