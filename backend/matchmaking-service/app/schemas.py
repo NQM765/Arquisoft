@@ -1,38 +1,33 @@
 from pydantic import BaseModel, Field
 
 
-class JoinQueueRequest(BaseModel):
-    minPlayers: int = Field(default=2, ge=2, le=4)
-    maxPlayers: int = Field(default=2, ge=2, le=4)
+class CreateMatchRequest(BaseModel):
     gameMode: str = Field(default="standard", min_length=1, max_length=40)
     region: str = Field(default="default", min_length=1, max_length=40)
+    maxPlayers: int = Field(default=2, ge=2, le=4)
+    relayJoinCode: str  # enviado por Unity junto con los demás campos
 
 
-class ReadyRequest(BaseModel):
-    ready: bool = True
+class JoinMatchRequest(BaseModel):
+    matchId: str
 
 
 class RelaySessionData(BaseModel):
-    lobbyId: str | None = None
-    lobbyCode: str | None = None
-    relayJoinCode: str | None = None
-    sessionName: str | None = None
+    relayJoinCode: str
 
 
 class MatchPlayer(BaseModel):
     userId: int
     username: str
     role: str
-    ready: bool
 
 
 class MatchResponse(BaseModel):
     matchId: str
     status: str
-    minPlayers: int
-    maxPlayers: int
     gameMode: str
     region: str
+    maxPlayers: int
     hostUserId: int
     players: list[MatchPlayer]
     relay: RelaySessionData | None = None
@@ -40,5 +35,9 @@ class MatchResponse(BaseModel):
     updatedAtUtc: str
 
 
-class QueueJoinResponse(MatchResponse):
+class CreateMatchResponse(MatchResponse):
+    role: str
+
+
+class JoinMatchResponse(MatchResponse):
     role: str

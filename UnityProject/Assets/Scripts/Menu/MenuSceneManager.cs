@@ -29,15 +29,9 @@ public class MenuSceneManager : MonoBehaviour
 
     public void OnMultiplayerPressed()
     {
-        if (!AuthSession.IsAuthenticated)
-        {
-            SetStatus("Debes iniciar sesion para jugar multiplayer.");
-            return;
-        }
 
-        MultiplayerBootstrap bootstrap = MultiplayerBootstrap.GetOrCreate();
-        bootstrap.FindMatch();
-        SetStatus("Buscando partida multiplayer...");
+        SceneManager.LoadScene("MultiplayerMenuScene");
+
     }
 
     public void OnBackPressed()

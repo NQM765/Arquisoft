@@ -6,6 +6,17 @@ services:
     ports:
       - "5433:5432"
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI → http://localhost:15672 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   support:
     build: .
     working_dir: /app_dir/support-service
@@ -25,7 +36,11 @@ services:
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
     ports:
       - "8001:8001"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       PYTHONPATH: /app_dir:/app_dir/matchmaking-service
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/

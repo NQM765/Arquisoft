@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Unity.Netcode;
 using Unity.Services.Authentication;
@@ -12,67 +12,36 @@ public class RelayLobbyClient : MonoBehaviour
 
     ISession currentSession;
 
-    public string CurrentSessionId => currentSession != null ? currentSession.Id : null;
-    public string CurrentJoinCode => currentSession != null ? currentSession.Code : null;
+    public string CurrentJoinCode => currentSession?.Code;
+
+    // ── Singleton ─────────────────────────────────────────────────────────────
 
     public static RelayLobbyClient GetOrCreate()
     {
-        if (Instance != null)
-        {
-            return Instance;
-        }
-
+        if (Instance != null) return Instance;
         Instance = FindFirstObjectByType<RelayLobbyClient>();
-        if (Instance != null)
-        {
-            return Instance;
-        }
-
-        GameObject go = new GameObject("RelayLobbyClient");
+        if (Instance != null) return Instance;
+        var go = new GameObject("RelayLobbyClient");
         Instance = go.AddComponent<RelayLobbyClient>();
         return Instance;
     }
 
     void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
     }
 
-    async Task EnsureUnityServicesReadyAsync()
-    {
-        string profile = GetAuthProfileName();
-        if (UnityServices.State == ServicesInitializationState.Uninitialized)
-        {
-            InitializationOptions options = new InitializationOptions().SetProfile(profile);
-            await UnityServices.InitializeAsync(options);
-        }
-        else if (AuthenticationService.Instance.Profile != profile)
-        {
-            if (AuthenticationService.Instance.IsSignedIn)
-            {
-                AuthenticationService.Instance.SignOut(true);
-            }
+    // ── API pública ──────────────────────────────────────────────────────────
 
-            AuthenticationService.Instance.SwitchProfile(profile);
-        }
-
-        if (!AuthenticationService.Instance.IsSignedIn)
-        {
-            await AuthenticationService.Instance.SignInAnonymouslyAsync();
-        }
-    }
-
-    public async void StartHostWithRelaySession(
-        string matchId,
+    /// <summary>
+    /// HOST: Inicia una sesión Relay y devuelve el join code vía callback.
+    /// MultiplayerBootstrap usa ese code para registrar el match en el servidor.
+    /// </summary>
+    public async void StartHostWithRelay(
         int maxPlayers,
-        Action<MatchmakingClient.MatchResponse> onSuccess,
+        Action<string> onJoinCodeReady,
         Action<string> onError)
     {
         try
@@ -80,22 +49,15 @@ public class RelayLobbyClient : MonoBehaviour
             RtsNetcodeRuntime.EnsureNetworkManager();
             await EnsureUnityServicesReadyAsync();
 
-            SessionOptions options = new SessionOptions
+            var options = new SessionOptions
             {
                 MaxPlayers = Mathf.Clamp(maxPlayers, 2, 4)
             }.WithRelayNetwork();
 
             currentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
-            RtsNetworkCommandBus.GetOrCreate().Activate();
+            //RtsNetworkCommandBus.GetOrCreate().Activate();
 
-            PublishRelayMetadata(
-                matchId,
-                currentSession.Id,
-                currentSession.Code,
-                currentSession.Code,
-                currentSession.Id,
-                onSuccess,
-                onError);
+            onJoinCodeReady?.Invoke(currentSession.Code);
         }
         catch (Exception ex)
         {
@@ -103,23 +65,22 @@ public class RelayLobbyClient : MonoBehaviour
         }
     }
 
-    public async void JoinRelaySessionByCode(
+    /// <summary>
+    /// CLIENTE: Se une a una sesión Relay existente usando el join code.
+    /// </summary>
+    public async void JoinByCode(
         string joinCode,
         Action onSuccess,
         Action<string> onError)
     {
-        if (string.IsNullOrEmpty(joinCode))
-        {
-            onError?.Invoke("Join code vacio.");
-            return;
-        }
+        if (string.IsNullOrEmpty(joinCode)) { onError?.Invoke("Join code vacío."); return; }
 
         try
         {
             RtsNetcodeRuntime.EnsureNetworkManager();
             await EnsureUnityServicesReadyAsync();
             currentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode);
-            RtsNetworkCommandBus.GetOrCreate().Activate();
+            //RtsNetworkCommandBus.GetOrCreate().Activate();
             onSuccess?.Invoke();
         }
         catch (Exception ex)
@@ -128,73 +89,48 @@ public class RelayLobbyClient : MonoBehaviour
         }
     }
 
-    public void PublishRelayMetadata(
-        string matchId,
-        string lobbyId,
-        string lobbyCode,
-        string relayJoinCode,
-        string sessionName,
-        System.Action<MatchmakingClient.MatchResponse> onSuccess,
-        System.Action<string> onError)
-    {
-        MatchmakingClient client = MatchmakingClient.GetOrCreate();
-        MatchmakingClient.RelaySessionData data = new MatchmakingClient.RelaySessionData
-        {
-            lobbyId = lobbyId,
-            lobbyCode = lobbyCode,
-            relayJoinCode = relayJoinCode,
-            sessionName = sessionName
-        };
-
-        client.PublishRelayData(matchId, data, onSuccess, onError);
-    }
-
-    public void StartHostWithRelay()
-    {
-        Debug.LogWarning("[MULTIPLAYER] Usa StartHostWithRelaySession con matchId y maxPlayers.");
-    }
-
-    public void StartClientWithRelay(string relayJoinCode)
-    {
-        JoinRelaySessionByCode(
-            relayJoinCode,
-            () => Debug.Log("[MULTIPLAYER] Cliente unido a sesion Relay/Lobby."),
-            error => Debug.LogWarning("[MULTIPLAYER] Error uniendo cliente: " + error));
-    }
-
+    /// <summary>Abandona la sesión Relay actual y apaga el NetworkManager.</summary>
     public async void LeaveCurrentSession()
     {
-        ISession session = currentSession;
+        var session = currentSession;
         currentSession = null;
 
         try
         {
             if (session != null)
-            {
                 await session.LeaveAsync();
-            }
         }
         catch (Exception ex)
         {
-            Debug.LogWarning("[MULTIPLAYER] Error saliendo de Relay/Lobby: " + ex.Message);
+            Debug.LogWarning("[RELAY] Error saliendo de sesión: " + ex.Message);
         }
         finally
         {
-            NetworkManager networkManager = NetworkManager.Singleton;
-            if (networkManager != null && networkManager.IsListening)
-            {
-                networkManager.Shutdown();
-            }
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsListening)
+                nm.Shutdown();
         }
     }
 
-    string GetAuthProfileName()
+    // ── Helpers internos ─────────────────────────────────────────────────────
+
+    async Task EnsureUnityServicesReadyAsync()
     {
-        if (AuthSession.UserId > 0)
+        string profile = AuthSession.UserId > 0 ? "u_" + AuthSession.UserId : "default";
+
+        if (UnityServices.State == ServicesInitializationState.Uninitialized)
         {
-            return "u_" + AuthSession.UserId;
+            var options = new InitializationOptions().SetProfile(profile);
+            await UnityServices.InitializeAsync(options);
+        }
+        else if (AuthenticationService.Instance.Profile != profile)
+        {
+            if (AuthenticationService.Instance.IsSignedIn)
+                AuthenticationService.Instance.SignOut(true);
+            AuthenticationService.Instance.SwitchProfile(profile);
         }
 
-        return "default";
+        if (!AuthenticationService.Instance.IsSignedIn)
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
     }
 }

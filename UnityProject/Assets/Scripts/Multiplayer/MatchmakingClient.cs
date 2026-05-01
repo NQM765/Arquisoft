@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Text;
 using UnityEngine;
@@ -11,28 +11,20 @@ public class MatchmakingClient : MonoBehaviour
 
     public static MatchmakingClient Instance { get; private set; }
 
-    [Serializable]
-    public class JoinQueueRequest
-    {
-        public int minPlayers = 2;
-        public int maxPlayers = 2;
-        public string gameMode = "standard";
-        public string region = "default";
-    }
-
-    [Serializable]
-    public class ReadyRequest
-    {
-        public bool ready = true;
-    }
+    // ── DTOs ────────────────────────────────────────────────────────────────
 
     [Serializable]
     public class RelaySessionData
     {
-        public string lobbyId;
-        public string lobbyCode;
         public string relayJoinCode;
-        public string sessionName;
+    }
+
+    [Serializable]
+    public class CreateMatchRequest
+    {
+        public string gameMode = "standard";
+        public string region = "default";
+        public int maxPlayers = 2;
     }
 
     [Serializable]
@@ -41,117 +33,125 @@ public class MatchmakingClient : MonoBehaviour
         public int userId;
         public string username;
         public string role;
-        public bool ready;
     }
 
     [Serializable]
     public class MatchResponse
     {
         public string matchId;
-        public string status;
-        public int minPlayers;
-        public int maxPlayers;
+        public string status;       // "waiting" | "starting" | "closed"
         public string gameMode;
         public string region;
+        public int maxPlayers;
         public int hostUserId;
         public MatchPlayer[] players;
         public RelaySessionData relay;
         public string createdAtUtc;
         public string updatedAtUtc;
-        public string role;
+        public string role;         // solo presente en Create/Join response
     }
+
+    /// <summary>Respuesta del endpoint GET /queue/next.</summary>
+    [Serializable]
+    public class NextMatchData
+    {
+        public string matchId;
+        public string relayJoinCode;
+    }
+
+    // ── Singleton ────────────────────────────────────────────────────────────
 
     public static MatchmakingClient GetOrCreate()
     {
-        if (Instance != null)
-        {
-            return Instance;
-        }
-
+        if (Instance != null) return Instance;
         Instance = FindFirstObjectByType<MatchmakingClient>();
-        if (Instance != null)
-        {
-            return Instance;
-        }
-
-        GameObject go = new GameObject("MatchmakingClient");
+        if (Instance != null) return Instance;
+        var go = new GameObject("MatchmakingClient");
         Instance = go.AddComponent<MatchmakingClient>();
         return Instance;
     }
 
     void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
     }
 
-    public void JoinQueue(Action<MatchResponse> onSuccess, Action<string> onError, int minPlayers = 2, int maxPlayers = 2)
-    {
-        JoinQueueRequest request = new JoinQueueRequest
-        {
-            minPlayers = minPlayers,
-            maxPlayers = maxPlayers
-        };
+    // ── API pública ──────────────────────────────────────────────────────────
 
-        StartCoroutine(PostJsonCoroutine("/matchmaking/queue/join", request, onSuccess, onError));
+    /// <summary>
+    /// Crea una nueva partida enviando los datos del relay ya generados.
+    /// El host puede cargar la escena inmediatamente tras el callback.
+    /// </summary>
+    public void CreateMatch(
+        string relayJoinCode,
+        Action<MatchResponse> onSuccess,
+        Action<string> onError,
+        int maxPlayers = 2)
+    {
+        // El backend espera dos campos: CreateMatchRequest + RelaySessionData.
+        // Los fusionamos en un objeto anónimo serializable.
+        var payload = new CreateMatchPayload
+        {
+            gameMode = "standard",
+            region = "default",
+            maxPlayers = maxPlayers,
+            relayJoinCode = relayJoinCode
+        };
+        StartCoroutine(PostJsonCoroutine("/matchmaking/matches", payload, onSuccess, onError));
     }
 
+    /// <summary>
+    /// Consulta el próximo match disponible en la cola de RabbitMQ.
+    /// Si hay uno, devuelve { matchId, relayJoinCode }; si no hay, devuelve null.
+    /// </summary>
+    public void GetNextAvailableMatch(
+        Action<NextMatchData> onMatch,
+        Action onEmpty,
+        Action<string> onError)
+    {
+        StartCoroutine(GetNextMatchCoroutine(onMatch, onEmpty, onError));
+    }
+
+    /// <summary>
+    /// Registra al cliente en el match indicado (cambia status a "starting").
+    /// </summary>
+    public void JoinMatch(
+        string matchId,
+        Action<MatchResponse> onSuccess,
+        Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        StartCoroutine(PostJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/join",
+            new EmptyPayload(),
+            onSuccess,
+            onError));
+    }
+
+    /// <summary>Obtiene el estado actual de un match.</summary>
     public void GetMatch(string matchId, Action<MatchResponse> onSuccess, Action<string> onError)
     {
-        if (string.IsNullOrEmpty(matchId))
-        {
-            onError?.Invoke("Match id vacio.");
-            return;
-        }
-
-        StartCoroutine(GetJsonCoroutine("/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId), onSuccess, onError));
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        StartCoroutine(GetJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId),
+            onSuccess,
+            onError));
     }
 
-    public void PublishRelayData(string matchId, RelaySessionData relayData, Action<MatchResponse> onSuccess, Action<string> onError)
-    {
-        if (string.IsNullOrEmpty(matchId))
-        {
-            onError?.Invoke("Match id vacio.");
-            return;
-        }
-
-        if (relayData == null)
-        {
-            onError?.Invoke("Relay data vacio.");
-            return;
-        }
-
-        StartCoroutine(PostJsonCoroutine("/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/relay", relayData, onSuccess, onError));
-    }
-
-    public void SetReady(string matchId, bool ready, Action<MatchResponse> onSuccess, Action<string> onError)
-    {
-        if (string.IsNullOrEmpty(matchId))
-        {
-            onError?.Invoke("Match id vacio.");
-            return;
-        }
-
-        ReadyRequest request = new ReadyRequest { ready = ready };
-        StartCoroutine(PostJsonCoroutine("/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/ready", request, onSuccess, onError));
-    }
-
+    /// <summary>Abandona el match actual y lo cierra en el servidor.</summary>
     public void LeaveMatch(string matchId, Action<MatchResponse> onSuccess, Action<string> onError)
     {
-        if (string.IsNullOrEmpty(matchId))
-        {
-            onError?.Invoke("Match id vacio.");
-            return;
-        }
-
-        StartCoroutine(PostJsonCoroutine("/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/leave", new EmptyPayload(), onSuccess, onError));
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        StartCoroutine(PostJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/leave",
+            new EmptyPayload(),
+            onSuccess,
+            onError));
     }
+
+    // ── Helpers internos ─────────────────────────────────────────────────────
 
     string BuildUrl(string endpoint)
     {
@@ -162,32 +162,55 @@ public class MatchmakingClient : MonoBehaviour
 
     IEnumerator GetJsonCoroutine(string endpoint, Action<MatchResponse> onSuccess, Action<string> onError)
     {
-        UnityWebRequest request = UnityWebRequest.Get(BuildUrl(endpoint));
+        var request = UnityWebRequest.Get(BuildUrl(endpoint));
         AuthSession.ApplyAuthorization(request);
         request.timeout = 10;
-
         yield return request.SendWebRequest();
-        HandleJsonResponse(request, onSuccess, onError);
+        HandleMatchResponse(request, onSuccess, onError);
     }
 
     IEnumerator PostJsonCoroutine<T>(string endpoint, T payload, Action<MatchResponse> onSuccess, Action<string> onError)
     {
         string json = JsonUtility.ToJson(payload);
-        UnityWebRequest request = new UnityWebRequest(BuildUrl(endpoint), UnityWebRequest.kHttpVerbPOST);
+        var request = new UnityWebRequest(BuildUrl(endpoint), UnityWebRequest.kHttpVerbPOST);
         request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
         AuthSession.ApplyAuthorization(request);
         request.timeout = 10;
-
         yield return request.SendWebRequest();
-        HandleJsonResponse(request, onSuccess, onError);
+        HandleMatchResponse(request, onSuccess, onError);
     }
 
-    void HandleJsonResponse(UnityWebRequest request, Action<MatchResponse> onSuccess, Action<string> onError)
+    IEnumerator GetNextMatchCoroutine(
+        Action<NextMatchData> onMatch,
+        Action onEmpty,
+        Action<string> onError)
+    {
+        var request = UnityWebRequest.Get(BuildUrl("/matchmaking/queue/next"));
+        AuthSession.ApplyAuthorization(request);
+        request.timeout = 10;
+        yield return request.SendWebRequest();
+
+        bool hasNetError = request.result != UnityWebRequest.Result.Success;
+        string text = request.downloadHandler?.text ?? string.Empty;
+        request.Dispose();
+
+        if (hasNetError) { onError?.Invoke(request.error); yield break; }
+        if (string.IsNullOrWhiteSpace(text) || text == "null")
+        { onEmpty?.Invoke(); yield break; }
+
+        var data = JsonUtility.FromJson<NextMatchData>(text);
+        if (data == null || string.IsNullOrEmpty(data.matchId))
+        { onEmpty?.Invoke(); yield break; }
+
+        onMatch?.Invoke(data);
+    }
+
+    void HandleMatchResponse(UnityWebRequest request, Action<MatchResponse> onSuccess, Action<string> onError)
     {
         bool hasError = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
-        string responseText = request.downloadHandler != null ? request.downloadHandler.text : string.Empty;
+        string responseText = request.downloadHandler?.text ?? string.Empty;
 
         if (hasError)
         {
@@ -196,13 +219,21 @@ public class MatchmakingClient : MonoBehaviour
             return;
         }
 
-        MatchResponse response = JsonUtility.FromJson<MatchResponse>(responseText);
-        onSuccess?.Invoke(response);
+        onSuccess?.Invoke(JsonUtility.FromJson<MatchResponse>(responseText));
         request.Dispose();
     }
 
+    // ── Payloads auxiliares ───────────────────────────────────────────────────
+
     [Serializable]
-    class EmptyPayload
+    class CreateMatchPayload
     {
+        public string gameMode;
+        public string region;
+        public int maxPlayers;
+        public string relayJoinCode;
     }
+
+    [Serializable]
+    class EmptyPayload { }
 }
