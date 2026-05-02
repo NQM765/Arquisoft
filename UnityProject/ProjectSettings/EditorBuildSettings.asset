@@ -17,6 +17,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/MapGeneratorScene.unity
     guid: b2abeb4c4815f2c468c5b9577a7798bb
+  - enabled: 1
+    path: Assets/Scenes/MultiplayerMenuScene.unity
+    guid: 4b2ede5b9f61f694180240cc125e0cc7
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0

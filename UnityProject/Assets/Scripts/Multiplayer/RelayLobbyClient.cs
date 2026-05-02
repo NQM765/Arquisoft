@@ -37,7 +37,6 @@ public class RelayLobbyClient : MonoBehaviour
 
     /// <summary>
     /// HOST: Inicia una sesión Relay y devuelve el join code vía callback.
-    /// MultiplayerBootstrap usa ese code para registrar el match en el servidor.
     /// </summary>
     public async void StartHostWithRelay(
         int maxPlayers,
@@ -55,8 +54,7 @@ public class RelayLobbyClient : MonoBehaviour
             }.WithRelayNetwork();
 
             currentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
-            //RtsNetworkCommandBus.GetOrCreate().Activate();
-
+            RtsNetworkCommandBus.GetOrCreate().Activate();
             onJoinCodeReady?.Invoke(currentSession.Code);
         }
         catch (Exception ex)
@@ -80,7 +78,7 @@ public class RelayLobbyClient : MonoBehaviour
             RtsNetcodeRuntime.EnsureNetworkManager();
             await EnsureUnityServicesReadyAsync();
             currentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode);
-            //RtsNetworkCommandBus.GetOrCreate().Activate();
+            RtsNetworkCommandBus.GetOrCreate().Activate();
             onSuccess?.Invoke();
         }
         catch (Exception ex)
