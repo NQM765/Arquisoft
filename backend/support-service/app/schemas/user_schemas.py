@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -21,3 +22,15 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OAuthSessionResponse(BaseModel):
+    session_id: str
+    status: str
+    user_data: Optional[dict] = None
+
+
+class OAuthInitResponse(BaseModel):
+    session_id: str
+    state: str
+    auth_url: str

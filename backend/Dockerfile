@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PYTHONPATH=/app_dir:/app_dir/support-service
+ENV PYTHONPATH=/app_dir:/app_dir/support-service:/app_dir/shared
 
 WORKDIR /app_dir/support-service
 

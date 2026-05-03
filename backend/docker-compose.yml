@@ -5,6 +5,8 @@ services:
       - .env
     ports:
       - "5433:5432"
+    networks:
+      - app-network
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -16,6 +18,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   support:
     build: .
@@ -28,7 +32,9 @@ services:
     env_file:
       - .env
     environment:
-      PYTHONPATH: /app_dir:/app_dir/support-service
+      PYTHONPATH: /app_dir:/app_dir/support-service:/app_dir/shared
+    networks:
+      - app-network
 
   matchmaking:
     build: .
@@ -42,5 +48,11 @@ services:
     env_file:
       - .env
     environment:
-      PYTHONPATH: /app_dir:/app_dir/matchmaking-service
+      PYTHONPATH: /app_dir:/app_dir/matchmaking-service:/app_dir/shared
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    name: arquisoft-network
