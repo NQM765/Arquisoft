@@ -7,6 +7,9 @@ router = APIRouter(prefix="/match", tags=["match"])
 
 @router.post("/session-summary", status_code=status.HTTP_201_CREATED)
 def receive_match_summary(payload: ReceivedPayload):
+    if db is None:
+        raise HTTPException(status_code=503, detail="Firebase not configured")
+    
     payload_dict = payload.dict()
 
     doc_ref = db.collection("match_summaries").add(payload_dict)
