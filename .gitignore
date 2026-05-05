@@ -156,3 +156,10 @@ htmlcov/
 UnityProject/.vs/
 UnityProject/.vsconfig
 Monolith/.envMonolith/
+
+# -----------------------------
+# Firebase / Secrets (CRITICO)
+# -----------------------------
+backend\Statistics\firebase-credentials.json
+*.secret.json
+*.credentials.json
