@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 public class MatchmakingClient : MonoBehaviour
 {
     [Header("Matchmaking API")]
-    [SerializeField] string baseUrl = "http://127.0.0.1:8001";
+    [SerializeField] string baseUrl = "https://127.0.0.1:8001";
 
     public static MatchmakingClient Instance { get; private set; }
 
