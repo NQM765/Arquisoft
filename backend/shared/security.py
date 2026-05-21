@@ -8,6 +8,10 @@ import time
 from dataclasses import dataclass
 
 from fastapi import Header, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
+
+from shared.connections.postgresql_connection import SessionLocal
+from shared.models.user import User
 
 
 @dataclass(frozen=True)
@@ -30,11 +34,12 @@ def _base64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
-def create_access_token(user_id: int, username: str, expires_in_seconds: int = 86400) -> str:
+def create_access_token(user_id: int, username: str, expires_in_seconds: int = 86400, token_version: int = 0) -> str:
     payload = {
         "sub": str(user_id),
         "username": username,
         "exp": int(time.time()) + expires_in_seconds,
+        "tv": int(token_version),
     }
     payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     encoded_payload = _base64url_encode(payload_json)
@@ -71,6 +76,7 @@ def decode_access_token(token: str) -> AuthPrincipal:
         expires_at = int(payload["exp"])
         user_id = int(payload["sub"])
         username = str(payload["username"])
+        token_tv = int(payload.get("tv", 0))
     except (binascii.Error, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,6 +87,34 @@ def decode_access_token(token: str) -> AuthPrincipal:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token expired",
+        )
+
+    # Check token_version against DB for simple revocation/versioning
+    try:
+        db = SessionLocal()
+        user = db.query(User).filter(User.user_id == user_id).first()
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User database unavailable",
+        )
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+        )
+
+    db_tv = int(getattr(user, "token_version", 0))
+    if db_tv != token_tv:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token revoked",
         )
 
     return AuthPrincipal(user_id=user_id, username=username)

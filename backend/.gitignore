@@ -8,3 +8,4 @@ support-service/config/serviceAccountKey.json
 .env.*
 venv/
 __pycache__/
+*.pem

@@ -38,6 +38,10 @@ def ensure_users_schema() -> None:
     if "username" in columns and engine.dialect.name == "postgresql":
         statements.append("ALTER TABLE users ALTER COLUMN username TYPE VARCHAR(255)")
 
+    if "token_version" not in columns:
+        # Add token_version with default 0 for simple revocation/versioning
+        statements.append("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0 NOT NULL")
+
     statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)")
 
     with engine.begin() as connection:

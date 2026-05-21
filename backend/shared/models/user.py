@@ -10,3 +10,4 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True)
     password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    token_version = Column(Integer, default=0, nullable=False)

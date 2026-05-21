@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.connections.postgresql_connection import get_db
 from app.models.user import User
 from app.schemas.user_schemas import AuthResponse, GoogleTokenIn
-from shared.security import create_access_token
+from shared.security import create_access_token, AuthPrincipal, get_current_user
+from fastapi import Depends
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -60,7 +61,8 @@ def login_with_google(payload: GoogleTokenIn, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    access_token = create_access_token(user.user_id, user.username)
+    token_version = getattr(user, "token_version", 0)
+    access_token = create_access_token(user.user_id, user.username, token_version=token_version)
 
     return {
         "user_id": user.user_id,
@@ -70,3 +72,16 @@ def login_with_google(payload: GoogleTokenIn, db: Session = Depends(get_db)):
         "access_token": access_token,
         "token_type": "bearer",
     }
+
+
+@router.post("/revoke")
+def revoke_tokens(current_user: AuthPrincipal = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Invalidate all existing tokens for the authenticated user by bumping token_version."""
+    user = db.query(User).filter(User.user_id == current_user.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.token_version = (getattr(user, "token_version", 0) or 0) + 1
+    db.add(user)
+    db.commit()
+    return {"message": "User tokens revoked"}
