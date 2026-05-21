@@ -50,3 +50,18 @@ services:
     environment:
       PYTHONPATH: /app_dir:/app_dir/matchmaking-service
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+
+  statistics:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app_dir/Statistics
+    command: ["/app_dir/statistics"]
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      STATISTICS_SERVICE_PORT: 8002
+      FIREBASE_CREDENTIALS: /app_dir/Statistics/firebase-credentials.json
+      FIREBASE_PROJECT_ID: ciudadblanca-3f09e
