@@ -5,7 +5,11 @@ services:
     depends_on:
       web-frontend:
         condition: service_started
-      support:
+      support_1:
+        condition: service_started
+      support_2:
+        condition: service_started
+      support_3:
         condition: service_started
       matchmaking:
         condition: service_started
@@ -31,9 +35,9 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       NEXTAUTH_URL: http://localhost:3000
-      PY_BACKEND_URL: http://support:8000
+      PY_BACKEND_URL: http://support_1:8000
     depends_on:
-      support:
+      support_1:
         condition: service_started
     networks:
       - private
@@ -62,7 +66,39 @@ services:
     networks:
       - private
 
-  support:
+  support_1:
+    build:
+      context: ./backend
+    working_dir: /app_dir/support-service
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      PYTHONPATH: /app_dir:/app_dir/support-service
+      ENABLE_HTTPS_REDIRECT: "false"
+    networks:
+      - private
+
+  support_2:
+    build:
+      context: ./backend
+    working_dir: /app_dir/support-service
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      PYTHONPATH: /app_dir:/app_dir/support-service
+      ENABLE_HTTPS_REDIRECT: "false"
+    networks:
+      - private
+
+  support_3:
     build:
       context: ./backend
     working_dir: /app_dir/support-service

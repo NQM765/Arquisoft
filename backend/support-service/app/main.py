@@ -1,4 +1,5 @@
 import os
+import socket
 import time
 
 from dotenv import load_dotenv
@@ -30,7 +31,7 @@ async def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "component": "support"}
+    return {"status": "ok", "component": "support", "instance": socket.gethostname()}
 
 
 def ensure_users_schema() -> None:
