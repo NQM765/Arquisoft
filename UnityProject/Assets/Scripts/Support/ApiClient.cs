@@ -217,6 +217,11 @@ public class ApiClient : MonoBehaviour
     {
         string cleanBase = baseUrl.TrimEnd('/');
         string cleanEndpoint = endpoint.StartsWith("/") ? endpoint : "/" + endpoint;
+        if (cleanBase.EndsWith("/support", StringComparison.OrdinalIgnoreCase)
+            && cleanEndpoint.StartsWith("/support/", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanEndpoint = cleanEndpoint.Substring("/support".Length);
+        }
         return cleanBase + cleanEndpoint;
     }
 

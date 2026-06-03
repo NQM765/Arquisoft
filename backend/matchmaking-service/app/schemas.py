@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -10,6 +12,19 @@ class CreateMatchRequest(BaseModel):
 
 class JoinMatchRequest(BaseModel):
     matchId: str
+
+
+class MatchSnapshotRequest(BaseModel):
+    sequence: int = Field(default=0, ge=0)
+    snapshot: dict[str, Any]
+
+
+class ClaimHostRequest(BaseModel):
+    relayJoinCode: str = Field(min_length=1)
+
+
+class ReportHostLostRequest(BaseModel):
+    hostGeneration: int = Field(default=0, ge=0)
 
 
 class RelaySessionData(BaseModel):
@@ -31,6 +46,10 @@ class MatchResponse(BaseModel):
     hostUserId: int
     players: list[MatchPlayer]
     relay: RelaySessionData | None = None
+    hostGeneration: int = 0
+    hostHeartbeatAtUtc: str | None = None
+    snapshotSequence: int = 0
+    hasSnapshot: bool = False
     createdAtUtc: str
     updatedAtUtc: str
 
@@ -41,3 +60,17 @@ class CreateMatchResponse(MatchResponse):
 
 class JoinMatchResponse(MatchResponse):
     role: str
+
+
+class NextMatchResponse(BaseModel):
+    matchId: str
+    relayJoinCode: str
+    hostGeneration: int = 0
+    hostStale: bool = False
+    alreadyJoined: bool = False
+
+
+class MigrationStateResponse(MatchResponse):
+    hostStale: bool
+    migrationHostUserId: int | None = None
+    snapshot: dict[str, Any] | None = None

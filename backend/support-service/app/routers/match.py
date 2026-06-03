@@ -7,6 +7,7 @@ from shared.security import AuthPrincipal, get_current_user
 router = APIRouter(tags=["match"])
 
 @router.post("/support/session-summary", status_code=status.HTTP_201_CREATED)
+@router.post("/session-summary", status_code=status.HTTP_201_CREATED)
 @router.post("/match/session-summary", status_code=status.HTTP_201_CREATED)
 def receive_match_summary(
     payload: ReceivedPayload,

@@ -33,6 +33,10 @@ public class MultiplayerMenuController : MonoBehaviour
     {
         bootstrap = MultiplayerBootstrap.GetOrCreate();
 
+        btnCreateMatch.onClick = new Button.ButtonClickedEvent();
+        btnJoinMatch.onClick = new Button.ButtonClickedEvent();
+        btnBack.onClick = new Button.ButtonClickedEvent();
+
         btnCreateMatch.onClick.AddListener(OnCreateMatch);
         btnJoinMatch.onClick.AddListener(OnJoinMatch);
         btnBack.onClick.AddListener(OnBack);
@@ -47,8 +51,9 @@ public class MultiplayerMenuController : MonoBehaviour
         if (btnBack != null) btnBack.onClick.RemoveListener(OnBack);
     }
 
-    void OnCreateMatch()
+    public void OnCreateMatch()
     {
+        Debug.Log("[MULTIPLAYER_MENU] Create button clicked. userId=" + AuthSession.UserId);
         SetInteractable(false);
         SetStatus("Creando partida...");
 
@@ -60,8 +65,9 @@ public class MultiplayerMenuController : MonoBehaviour
             });
     }
 
-    void OnJoinMatch()
+    public void OnJoinMatch()
     {
+        Debug.Log("[MULTIPLAYER_MENU] Join button clicked. userId=" + AuthSession.UserId);
         SetInteractable(false);
         SetStatus("Buscando partida disponible...");
 
@@ -78,7 +84,7 @@ public class MultiplayerMenuController : MonoBehaviour
             });
     }
 
-    void OnBack()
+    public void OnBack()
     {
         SceneManager.LoadScene(mainMenuScene);
     }

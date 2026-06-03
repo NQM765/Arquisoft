@@ -145,6 +145,16 @@ public class MovementController : MonoBehaviour
 
         if (selectionSystem == null) return 0;
 
+        MultiplayerBootstrap bootstrap = MultiplayerBootstrap.Instance;
+        if (bootstrap != null && bootstrap.HasMatch)
+        {
+            if (bootstrap.IsMigrationActive || !RtsNetworkCommandBus.IsMultiplayerActive)
+            {
+                Debug.Log("[MIGRATION] Orden de movimiento ignorada mientras se restaura la partida.");
+                return 0;
+            }
+        }
+
         if (RtsNetworkCommandBus.IsMultiplayerActive)
         {
             bool handledByNetwork = RtsNetworkCommandBus.GetOrCreate().RequestMoveSelectedUnits(

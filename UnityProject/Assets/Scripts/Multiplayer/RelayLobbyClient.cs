@@ -8,6 +8,8 @@ using UnityEngine;
 
 public class RelayLobbyClient : MonoBehaviour
 {
+    const float NetworkShutdownTimeoutSeconds = 8f;
+
     public static RelayLobbyClient Instance { get; private set; }
 
     ISession currentSession;
@@ -45,7 +47,7 @@ public class RelayLobbyClient : MonoBehaviour
     {
         try
         {
-            RtsNetcodeRuntime.EnsureNetworkManager();
+            await EnsureNetworkReadyForNewSessionAsync();
             await EnsureUnityServicesReadyAsync();
 
             var options = new SessionOptions
@@ -75,7 +77,7 @@ public class RelayLobbyClient : MonoBehaviour
 
         try
         {
-            RtsNetcodeRuntime.EnsureNetworkManager();
+            await EnsureNetworkReadyForNewSessionAsync();
             await EnsureUnityServicesReadyAsync();
             currentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode);
             RtsNetworkCommandBus.GetOrCreate().Activate();
@@ -90,13 +92,18 @@ public class RelayLobbyClient : MonoBehaviour
     /// <summary>Abandona la sesión Relay actual y apaga el NetworkManager.</summary>
     public async void LeaveCurrentSession()
     {
+        await LeaveCurrentSessionAsync();
+    }
+
+    public async Task LeaveCurrentSessionAsync()
+    {
         var session = currentSession;
         currentSession = null;
 
         try
         {
             if (session != null)
-                await session.LeaveAsync();
+                await LeaveSessionWithTimeoutAsync(session);
         }
         catch (Exception ex)
         {
@@ -104,9 +111,8 @@ public class RelayLobbyClient : MonoBehaviour
         }
         finally
         {
-            var nm = NetworkManager.Singleton;
-            if (nm != null && nm.IsListening)
-                nm.Shutdown();
+            ShutdownNetworkManagerIfNeeded();
+            await WaitForNetworkManagerIdleAsync(NetworkShutdownTimeoutSeconds);
         }
     }
 
@@ -130,5 +136,94 @@ public class RelayLobbyClient : MonoBehaviour
 
         if (!AuthenticationService.Instance.IsSignedIn)
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
+    }
+
+    async Task EnsureNetworkReadyForNewSessionAsync()
+    {
+        if (currentSession != null || IsNetworkManagerBusy(NetworkManager.Singleton))
+        {
+            await LeaveCurrentSessionAsync();
+        }
+
+        RtsNetcodeRuntime.EnsureNetworkManager();
+        await WaitForNetworkManagerIdleAsync(NetworkShutdownTimeoutSeconds);
+    }
+
+    void ShutdownNetworkManagerIfNeeded()
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        if (networkManager == null || networkManager.ShutdownInProgress)
+        {
+            return;
+        }
+
+        if (networkManager.IsListening || networkManager.IsClient || networkManager.IsServer)
+        {
+            networkManager.Shutdown();
+        }
+    }
+
+    async Task LeaveSessionWithTimeoutAsync(ISession session)
+    {
+        Task leaveTask = session.LeaveAsync();
+        Task timeoutTask = Task.Delay(TimeSpan.FromSeconds(NetworkShutdownTimeoutSeconds));
+        Task completedTask = await Task.WhenAny(leaveTask, timeoutTask);
+
+        if (completedTask == timeoutTask)
+        {
+            Debug.LogWarning("[RELAY] Timeout saliendo de sesión. Continuando con el reinicio de red.");
+            _ = ObserveFaultedTaskAsync(leaveTask);
+            return;
+        }
+
+        await leaveTask;
+    }
+
+    async Task ObserveFaultedTaskAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[RELAY] LeaveAsync terminó con error despues del timeout: " + ex.Message);
+        }
+    }
+
+    async Task WaitForNetworkManagerIdleAsync(float timeoutSeconds)
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        if (networkManager == null)
+        {
+            return;
+        }
+
+        float timeoutAt = Time.realtimeSinceStartup + Mathf.Max(1f, timeoutSeconds);
+        while (IsNetworkManagerBusy(networkManager) && Time.realtimeSinceStartup < timeoutAt)
+        {
+            await Task.Yield();
+        }
+
+        if (IsNetworkManagerBusy(networkManager))
+        {
+            Debug.LogWarning("[RELAY] NetworkManager did not finish shutting down. Recreating it before starting a new Relay session.");
+            Destroy(networkManager.gameObject);
+            await Task.Yield();
+            await Task.Yield();
+            RtsNetcodeRuntime.EnsureNetworkManager();
+        }
+
+        await Task.Yield();
+        await Task.Yield();
+    }
+
+    static bool IsNetworkManagerBusy(NetworkManager networkManager)
+    {
+        return networkManager != null
+            && (networkManager.IsListening
+                || networkManager.IsClient
+                || networkManager.IsServer
+                || networkManager.ShutdownInProgress);
     }
 }

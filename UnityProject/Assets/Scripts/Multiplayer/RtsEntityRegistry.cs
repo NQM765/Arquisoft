@@ -33,6 +33,20 @@ public static class RtsEntityRegistry
         return entitiesById.TryGetValue(entityId, out entity) && entity != null;
     }
 
+    public static List<RtsNetworkEntity> GetAllEntities()
+    {
+        List<RtsNetworkEntity> entities = new List<RtsNetworkEntity>();
+        foreach (RtsNetworkEntity entity in entitiesById.Values)
+        {
+            if (entity != null)
+            {
+                entities.Add(entity);
+            }
+        }
+
+        return entities;
+    }
+
     public static bool TryGetComponent<T>(int entityId, out T component) where T : Component
     {
         component = null;

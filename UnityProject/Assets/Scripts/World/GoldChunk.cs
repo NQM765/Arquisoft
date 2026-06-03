@@ -31,7 +31,7 @@ public class GoldChunk : MonoBehaviour
 
     public void Mine()
     {
-        gold_full.SetActive(false);
-        gold_mined.SetActive(true);        
+        if (gold_full != null) gold_full.SetActive(false);
+        if (gold_mined != null) gold_mined.SetActive(true);
     }
 }

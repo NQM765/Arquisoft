@@ -68,17 +68,57 @@ public class SelectableEntity : MonoBehaviour
 
     public void SetSelected(bool selected)
     {
-        if (!useHighlightColor || targetRenderer == null) return;
+        if (!useHighlightColor) return;
 
         if (selected)
         {
-            targetRenderer.material.color = selectedColor;
+            ApplyColorToRenderers(selectedColor);
             return;
         }
 
-        if (hasOriginalColor)
+        RtsNetworkEntity networkEntity = GetComponent<RtsNetworkEntity>();
+        if (networkEntity == null)
         {
-            targetRenderer.material.color = originalColor;
+            networkEntity = GetComponentInParent<RtsNetworkEntity>();
+        }
+        if (networkEntity == null)
+        {
+            networkEntity = GetComponentInChildren<RtsNetworkEntity>();
+        }
+
+        if (networkEntity != null)
+        {
+            networkEntity.RefreshLocalCategory();
+        }
+        else if (hasOriginalColor)
+        {
+            ApplyColorToRenderers(originalColor);
+        }
+    }
+
+    private void ApplyColorToRenderers(Color color)
+    {
+        bool applied = false;
+        foreach (SpriteRenderer spriteRenderer in GetComponentsInChildren<SpriteRenderer>(true))
+        {
+            spriteRenderer.color = color;
+            applied = true;
+        }
+
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+        {
+            if (renderer is SpriteRenderer)
+            {
+                continue;
+            }
+
+            renderer.material.color = color;
+            applied = true;
+        }
+
+        if (!applied && targetRenderer != null)
+        {
+            targetRenderer.material.color = color;
         }
     }
 

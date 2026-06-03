@@ -77,6 +77,12 @@ public class RtsNetworkCommandBus : MonoBehaviour
         StopAllCoroutines();
     }
 
+    public void PrepareForNetworkRestart()
+    {
+        Deactivate();
+        registered = false;
+    }
+
     IEnumerator RegisterWhenReady()
     {
         while (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
@@ -89,6 +95,8 @@ public class RtsNetworkCommandBus : MonoBehaviour
         if (registered || NetworkManager.Singleton == null) return;
 
         CustomMessagingManager messaging = NetworkManager.Singleton.CustomMessagingManager;
+        if (messaging == null) return;
+
         messaging.RegisterNamedMessageHandler(MoveRequestMessage, OnMoveRequestMessage);
         messaging.RegisterNamedMessageHandler(MoveApplyMessage, OnMoveApplyMessage);
         messaging.RegisterNamedMessageHandler(ResourceGatherApplyMessage, OnResourceGatherApplyMessage);
@@ -108,18 +116,39 @@ public class RtsNetworkCommandBus : MonoBehaviour
 
     void UnregisterHandlers()
     {
-        if (!registered || NetworkManager.Singleton == null) return;
+        if (!registered) return;
+        if (NetworkManager.Singleton == null)
+        {
+            registered = false;
+            return;
+        }
 
         CustomMessagingManager messaging = NetworkManager.Singleton.CustomMessagingManager;
-        messaging.UnregisterNamedMessageHandler(MoveRequestMessage);
-        messaging.UnregisterNamedMessageHandler(MoveApplyMessage);
-        messaging.UnregisterNamedMessageHandler(ResourceGatherApplyMessage);
-        messaging.UnregisterNamedMessageHandler(ProductionRequestMessage);
-        messaging.UnregisterNamedMessageHandler(ProductionStartedApplyMessage);
-        messaging.UnregisterNamedMessageHandler(UnitSpawnedApplyMessage);
-        messaging.UnregisterNamedMessageHandler(ClientSceneReadyMessage);
-        messaging.UnregisterNamedMessageHandler(HostReloadSceneMessage);
-        registered = false;
+        if (messaging == null)
+        {
+            registered = false;
+            return;
+        }
+
+        try
+        {
+            messaging.UnregisterNamedMessageHandler(MoveRequestMessage);
+            messaging.UnregisterNamedMessageHandler(MoveApplyMessage);
+            messaging.UnregisterNamedMessageHandler(ResourceGatherApplyMessage);
+            messaging.UnregisterNamedMessageHandler(ProductionRequestMessage);
+            messaging.UnregisterNamedMessageHandler(ProductionStartedApplyMessage);
+            messaging.UnregisterNamedMessageHandler(UnitSpawnedApplyMessage);
+            messaging.UnregisterNamedMessageHandler(ClientSceneReadyMessage);
+            messaging.UnregisterNamedMessageHandler(HostReloadSceneMessage);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[MULTIPLAYER] Error unregistering message handlers during network restart: " + ex.Message);
+        }
+        finally
+        {
+            registered = false;
+        }
     }
 
     // ── Sincronización de reinicio ────────────────────────────────────────────
@@ -152,17 +181,21 @@ public class RtsNetworkCommandBus : MonoBehaviour
         Debug.Log("[MULTIPLAYER] Host recibió ClientSceneReady — recargando escena.");
 
         // Avisar al cliente que el host también va a recargar
+        MultiplayerBootstrap.Instance?.TriggerHostReinitialize();
+    }
+
+    public void BroadcastHostReloadScene()
+    {
+        if (!IsServer) return;
+
+        EnsureRegisteredNow();
         using (FastBufferWriter writer = new FastBufferWriter(4, Allocator.Temp))
         {
-            NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(
+            NetworkManager.Singleton.CustomMessagingManager.SendNamedMessageToAll(
                 HostReloadSceneMessage,
-                senderId,
                 writer,
                 NetworkDelivery.Reliable);
         }
-
-        // Recargar la escena del host
-        MultiplayerBootstrap.Instance?.TriggerHostReinitialize();
     }
 
     void OnHostReloadSceneMessage(ulong senderId, FastBufferReader reader)
@@ -236,7 +269,10 @@ public class RtsNetworkCommandBus : MonoBehaviour
         if (unitEntity == null || resourceEntity == null) return true;
 
         if (resource.TryFarmResourceLocal(true))
+        {
             GetOrCreate().BroadcastResourceGathered(resourceEntity.EntityId, unitEntity.OwnerSlot);
+            MultiplayerBootstrap.Instance?.RequestImmediateSnapshot("resource depleted");
+        }
 
         return true;
     }

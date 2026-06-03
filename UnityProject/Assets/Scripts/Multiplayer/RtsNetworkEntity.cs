@@ -6,6 +6,14 @@ public class RtsNetworkEntity : MonoBehaviour
     [SerializeField] int ownerSlot = -1;
     [SerializeField] RtsEntityKind kind = RtsEntityKind.None;
 
+    static readonly Color[] PlayerColors =
+    {
+        new Color(0.20f, 0.55f, 1.00f, 1f),
+        new Color(1.00f, 0.35f, 0.22f, 1f),
+        new Color(0.20f, 0.85f, 0.40f, 1f),
+        new Color(1.00f, 0.82f, 0.20f, 1f),
+    };
+
     public int EntityId => entityId;
     public int OwnerSlot => ownerSlot;
     public RtsEntityKind Kind => kind;
@@ -50,29 +58,76 @@ public class RtsNetworkEntity : MonoBehaviour
             selectable = GetComponentInChildren<SelectableEntity>();
         }
 
-        if (selectable == null)
+        if (selectable != null)
+        {
+            switch (kind)
+            {
+                case RtsEntityKind.Unit:
+                    selectable.SetRuntimeCategory(IsOwnedByLocalPlayer()
+                        ? SelectableEntity.SelectableCategory.Unit
+                        : SelectableEntity.SelectableCategory.EnemyUnit);
+                    selectable.SetRuntimeBoxSelection(IsOwnedByLocalPlayer());
+                    break;
+                case RtsEntityKind.Building:
+                    selectable.SetRuntimeCategory(IsOwnedByLocalPlayer()
+                        ? SelectableEntity.SelectableCategory.Building
+                        : SelectableEntity.SelectableCategory.EnemyBuilding);
+                    selectable.SetRuntimeBoxSelection(false);
+                    break;
+                case RtsEntityKind.Resource:
+                    selectable.SetRuntimeCategory(SelectableEntity.SelectableCategory.Resource);
+                    selectable.SetRuntimeBoxSelection(false);
+                    break;
+            }
+        }
+
+        ApplyOwnerColor();
+    }
+
+    void ApplyOwnerColor()
+    {
+        if (ownerSlot < 0 || kind == RtsEntityKind.Resource)
         {
             return;
         }
 
-        switch (kind)
+        Color color = PlayerColors[Mathf.Abs(ownerSlot) % PlayerColors.Length];
+
+        foreach (SpriteRenderer spriteRenderer in GetComponentsInChildren<SpriteRenderer>(true))
         {
-            case RtsEntityKind.Unit:
-                selectable.SetRuntimeCategory(IsOwnedByLocalPlayer()
-                    ? SelectableEntity.SelectableCategory.Unit
-                    : SelectableEntity.SelectableCategory.EnemyUnit);
-                selectable.SetRuntimeBoxSelection(IsOwnedByLocalPlayer());
-                break;
-            case RtsEntityKind.Building:
-                selectable.SetRuntimeCategory(IsOwnedByLocalPlayer()
-                    ? SelectableEntity.SelectableCategory.Building
-                    : SelectableEntity.SelectableCategory.EnemyBuilding);
-                selectable.SetRuntimeBoxSelection(false);
-                break;
-            case RtsEntityKind.Resource:
-                selectable.SetRuntimeCategory(SelectableEntity.SelectableCategory.Resource);
-                selectable.SetRuntimeBoxSelection(false);
-                break;
+            spriteRenderer.color = color;
         }
+
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+        {
+            if (renderer is SpriteRenderer)
+            {
+                continue;
+            }
+
+            ApplyRendererColor(renderer, color);
+        }
+    }
+
+    static void ApplyRendererColor(Renderer renderer, Color color)
+    {
+        if (renderer == null || renderer.sharedMaterial == null)
+        {
+            return;
+        }
+
+        MaterialPropertyBlock block = new MaterialPropertyBlock();
+        renderer.GetPropertyBlock(block);
+
+        if (renderer.sharedMaterial.HasProperty("_BaseColor"))
+        {
+            block.SetColor("_BaseColor", color);
+        }
+        else if (renderer.sharedMaterial.HasProperty("_Color"))
+        {
+            block.SetColor("_Color", color);
+        }
+
+        renderer.SetPropertyBlock(block);
     }
 }

@@ -44,7 +44,8 @@ Los servicios internos quedan solo en la red privada de Docker:
 
 - `web-frontend:3000`
 - `support:8000`
-- `matchmaking:8001`
+- `matchmaking_1:8001`
+- `matchmaking_2:8001`
 - `db:5432`
 - `rabbitmq:5672`
 
@@ -212,11 +213,28 @@ Matchmaking (`localhost:8001`):
 - `POST /matchmaking/matches/{match_id}/join`
 - `GET /matchmaking/matches/{match_id}`
 - `POST /matchmaking/matches/{match_id}/leave`
+- `POST /matchmaking/matches/{match_id}/heartbeat`
+- `POST /matchmaking/matches/{match_id}/snapshot`
+- `GET /matchmaking/matches/{match_id}/migration`
+- `POST /matchmaking/matches/{match_id}/migration/claim`
 
 Los endpoints de matchmaking requieren:
 
 ```http
 Authorization: Bearer <access_token>
+```
+
+## Confiabilidad y Host Migration
+
+`matchmaking` persiste las partidas en PostgreSQL y puede ejecutarse con varias replicas detras del proxy. Si despliegas dos maquinas distintas por Cloudflare Tunnel, ambas deben compartir o sincronizar de forma consistente la base usada por `DATABASE_URL`; si cada replica ve una base distinta, no hay una eleccion confiable de nuevo host.
+
+Unity guarda heartbeat del host y snapshots periodicos del mundo. Si el host Unity se cierra o abandona, los clientes detectan que el heartbeat expiro, uno reclama el host, crea un nuevo Relay join code y restaura el ultimo snapshot. La perdida esperada de estado depende de `hostSnapshotInterval` en `MultiplayerBootstrap` y por defecto es de hasta 30 segundos.
+
+Para un Nginx con prefijos `/api/support/` y `/api/matchmaking/`, configura Unity con:
+
+```text
+Support API baseUrl: https://cronicasciudadblanca.qzz.io/api/support
+Matchmaking API baseUrl: https://cronicasciudadblanca.qzz.io/api/matchmaking
 ```
 
 ## Troubleshooting

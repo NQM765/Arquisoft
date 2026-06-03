@@ -21,6 +21,8 @@ configure_cors(app)
 
 app.include_router(auth_router)
 app.include_router(match_router)
+app.include_router(auth_router, prefix="/api/support")
+app.include_router(match_router, prefix="/api/support")
 
 if os.getenv("ENABLE_HTTPS_REDIRECT", "false").lower() in {"1", "true", "yes"}:
     app.add_middleware(HTTPSRedirectMiddleware)

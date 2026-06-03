@@ -31,7 +31,7 @@ public class ForestChunk : MonoBehaviour
 
     public void Cut()
     {
-        forest_full.SetActive(false);
-        forest_cut.SetActive(true);
+        if (forest_full != null) forest_full.SetActive(false);
+        if (forest_cut != null) forest_cut.SetActive(true);
     }
 }

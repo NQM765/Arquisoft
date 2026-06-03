@@ -142,6 +142,16 @@ public abstract class Humano : MonoBehaviour
 
     public virtual void SetMoveTarget(Vector3 target, ResourceNode targetResource = null, Humano targetHuman = null)
     {
+        MultiplayerBootstrap bootstrap = MultiplayerBootstrap.Instance;
+        if (bootstrap != null && bootstrap.HasMatch)
+        {
+            if (bootstrap.IsMigrationActive || !RtsNetworkCommandBus.IsMultiplayerActive)
+            {
+                Debug.Log("[MIGRATION] Orden directa ignorada mientras se restaura la partida.");
+                return;
+            }
+        }
+
         if (RtsNetworkCommandBus.IsMultiplayerActive)
         {
             RtsNetworkCommandBus.GetOrCreate().RequestMoveSelectedUnits(
@@ -155,8 +165,30 @@ public abstract class Humano : MonoBehaviour
         SetMoveTargetFromNetwork(target, targetResource, targetHuman);
     }
 
+    public virtual void PauseForMigration()
+    {
+        CancelMoveOrder();
+        movement = Vector3.zero;
+
+        if (navMesh != null)
+        {
+            navMesh.ResetPath();
+            navMesh.isStopped = true;
+        }
+
+        if (anim != null)
+        {
+            anim.SetBool("isWalking", false);
+        }
+    }
+
     public virtual void SetMoveTargetFromNetwork(Vector3 target, ResourceNode targetResource = null, Humano targetHuman = null)
     {
+        if (navMesh != null && navMesh.isStopped)
+        {
+            navMesh.isStopped = false;
+        }
+
         moveTarget = target;
         resourceTarget = targetResource;
         resourceActionPending = targetResource != null;

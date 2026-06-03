@@ -46,6 +46,10 @@ public class MatchmakingClient : MonoBehaviour
         public int hostUserId;
         public MatchPlayer[] players;
         public RelaySessionData relay;
+        public int hostGeneration;
+        public string hostHeartbeatAtUtc;
+        public int snapshotSequence;
+        public bool hasSnapshot;
         public string createdAtUtc;
         public string updatedAtUtc;
         public string role;         // solo presente en Create/Join response
@@ -57,6 +61,17 @@ public class MatchmakingClient : MonoBehaviour
     {
         public string matchId;
         public string relayJoinCode;
+        public int hostGeneration;
+        public bool hostStale;
+        public bool alreadyJoined;
+    }
+
+    [Serializable]
+    public class MigrationStateResponse : MatchResponse
+    {
+        public bool hostStale;
+        public int migrationHostUserId;
+        public RtsMatchSnapshot snapshot;
     }
 
     // ── Singleton ────────────────────────────────────────────────────────────
@@ -114,6 +129,14 @@ public class MatchmakingClient : MonoBehaviour
         StartCoroutine(GetNextMatchCoroutine(onMatch, onEmpty, onError));
     }
 
+    public void JoinNextAvailableMatch(
+        Action<MatchResponse> onMatch,
+        Action onEmpty,
+        Action<string> onError)
+    {
+        StartCoroutine(PostJoinNextCoroutine(onMatch, onEmpty, onError));
+    }
+
     /// <summary>
     /// Registra al cliente en el match indicado (cambia status a "starting").
     /// </summary>
@@ -151,12 +174,82 @@ public class MatchmakingClient : MonoBehaviour
             onError));
     }
 
+    public void Heartbeat(string matchId, Action<MatchResponse> onSuccess, Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        StartCoroutine(PostJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/heartbeat",
+            new EmptyPayload(),
+            onSuccess,
+            onError));
+    }
+
+    public void SaveSnapshot(
+        string matchId,
+        int sequence,
+        RtsMatchSnapshot snapshot,
+        Action<MatchResponse> onSuccess,
+        Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        var payload = new SnapshotPayload { sequence = sequence, snapshot = snapshot };
+        StartCoroutine(PostJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/snapshot",
+            payload,
+            onSuccess,
+            onError));
+    }
+
+    public void GetMigrationState(
+        string matchId,
+        Action<MigrationStateResponse> onSuccess,
+        Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        StartCoroutine(GetMigrationStateCoroutine(matchId, onSuccess, onError));
+    }
+
+    public void ReportHostLost(
+        string matchId,
+        int hostGeneration,
+        Action<MigrationStateResponse> onSuccess,
+        Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        var payload = new ReportHostLostPayload { hostGeneration = Mathf.Max(0, hostGeneration) };
+        StartCoroutine(PostMigrationStateCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/migration/report-host-lost",
+            payload,
+            onSuccess,
+            onError));
+    }
+
+    public void ClaimHost(
+        string matchId,
+        string relayJoinCode,
+        Action<MatchResponse> onSuccess,
+        Action<string> onError)
+    {
+        if (string.IsNullOrEmpty(matchId)) { onError?.Invoke("Match id vacio."); return; }
+        var payload = new ClaimHostPayload { relayJoinCode = relayJoinCode };
+        StartCoroutine(PostJsonCoroutine(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/migration/claim",
+            payload,
+            onSuccess,
+            onError));
+    }
+
     // ── Helpers internos ─────────────────────────────────────────────────────
 
     string BuildUrl(string endpoint)
     {
         string cleanBase = baseUrl.TrimEnd('/');
         string cleanEndpoint = endpoint.StartsWith("/") ? endpoint : "/" + endpoint;
+        if (cleanBase.EndsWith("/matchmaking", StringComparison.OrdinalIgnoreCase)
+            && cleanEndpoint.StartsWith("/matchmaking/", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanEndpoint = cleanEndpoint.Substring("/matchmaking".Length);
+        }
         return cleanBase + cleanEndpoint;
     }
 
@@ -221,6 +314,103 @@ public class MatchmakingClient : MonoBehaviour
         onMatch?.Invoke(data);
     }
 
+    IEnumerator PostJoinNextCoroutine(
+        Action<MatchResponse> onMatch,
+        Action onEmpty,
+        Action<string> onError)
+    {
+        var request = new UnityWebRequest(BuildUrl("/matchmaking/queue/join-next"), UnityWebRequest.kHttpVerbPOST);
+        request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes("{}"));
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+        ConfigureLocalCertificate(request);
+        AuthSession.ApplyAuthorization(request);
+        request.timeout = 10;
+        yield return request.SendWebRequest();
+
+        bool hasError = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
+        string text = request.downloadHandler?.text ?? string.Empty;
+
+        if (hasError)
+        {
+            onError?.Invoke(string.IsNullOrEmpty(text) ? request.error : text);
+            request.Dispose();
+            yield break;
+        }
+
+        request.Dispose();
+        if (string.IsNullOrWhiteSpace(text) || text == "null")
+        {
+            onEmpty?.Invoke();
+            yield break;
+        }
+
+        MatchResponse match = JsonUtility.FromJson<MatchResponse>(text);
+        if (match == null || string.IsNullOrEmpty(match.matchId) || match.relay == null || string.IsNullOrEmpty(match.relay.relayJoinCode))
+        {
+            onEmpty?.Invoke();
+            yield break;
+        }
+
+        onMatch?.Invoke(match);
+    }
+
+    IEnumerator GetMigrationStateCoroutine(
+        string matchId,
+        Action<MigrationStateResponse> onSuccess,
+        Action<string> onError)
+    {
+        var request = UnityWebRequest.Get(BuildUrl(
+            "/matchmaking/matches/" + UnityWebRequest.EscapeURL(matchId) + "/migration"));
+        ConfigureLocalCertificate(request);
+        AuthSession.ApplyAuthorization(request);
+        request.timeout = 10;
+        yield return request.SendWebRequest();
+
+        bool hasError = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
+        string responseText = request.downloadHandler?.text ?? string.Empty;
+
+        if (hasError)
+        {
+            onError?.Invoke(string.IsNullOrEmpty(responseText) ? request.error : responseText);
+            request.Dispose();
+            yield break;
+        }
+
+        onSuccess?.Invoke(JsonUtility.FromJson<MigrationStateResponse>(responseText));
+        request.Dispose();
+    }
+
+    IEnumerator PostMigrationStateCoroutine<T>(
+        string endpoint,
+        T payload,
+        Action<MigrationStateResponse> onSuccess,
+        Action<string> onError)
+    {
+        string json = JsonUtility.ToJson(payload);
+        var request = new UnityWebRequest(BuildUrl(endpoint), UnityWebRequest.kHttpVerbPOST);
+        request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+        ConfigureLocalCertificate(request);
+        AuthSession.ApplyAuthorization(request);
+        request.timeout = 10;
+        yield return request.SendWebRequest();
+
+        bool hasError = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
+        string responseText = request.downloadHandler?.text ?? string.Empty;
+
+        if (hasError)
+        {
+            onError?.Invoke(string.IsNullOrEmpty(responseText) ? request.error : responseText);
+            request.Dispose();
+            yield break;
+        }
+
+        onSuccess?.Invoke(JsonUtility.FromJson<MigrationStateResponse>(responseText));
+        request.Dispose();
+    }
+
     void HandleMatchResponse(UnityWebRequest request, Action<MatchResponse> onSuccess, Action<string> onError)
     {
         bool hasError = request.result != UnityWebRequest.Result.Success || request.responseCode >= 400;
@@ -250,6 +440,25 @@ public class MatchmakingClient : MonoBehaviour
 
     [Serializable]
     class EmptyPayload { }
+
+    [Serializable]
+    class SnapshotPayload
+    {
+        public int sequence;
+        public RtsMatchSnapshot snapshot;
+    }
+
+    [Serializable]
+    class ReportHostLostPayload
+    {
+        public int hostGeneration;
+    }
+
+    [Serializable]
+    class ClaimHostPayload
+    {
+        public string relayJoinCode;
+    }
 
     class LocalhostCertificateHandler : CertificateHandler
     {

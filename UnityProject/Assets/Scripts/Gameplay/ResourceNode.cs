@@ -77,6 +77,47 @@ public class ResourceNode : MonoBehaviour
         return gathered;
     }
 
+    public bool IsDepletedForSnapshot()
+    {
+        if (resourceState == ResourceState.Depleted)
+        {
+            return true;
+        }
+
+        ForestChunk forest = GetComponent<ForestChunk>();
+        if (forest != null && forest.forest_full != null && !forest.forest_full.activeSelf)
+        {
+            return true;
+        }
+
+        GoldChunk gold = GetComponent<GoldChunk>();
+        if (gold != null && gold.gold_full != null && !gold.gold_full.activeSelf)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public void ApplyDepletedFromSnapshot()
+    {
+        ForestChunk forest = GetComponent<ForestChunk>();
+        if (forest != null)
+        {
+            forest.Cut();
+            resourceType = ResourceType.Wood;
+        }
+
+        GoldChunk gold = GetComponent<GoldChunk>();
+        if (gold != null)
+        {
+            gold.Mine();
+            resourceType = ResourceType.Gold;
+        }
+
+        resourceState = ResourceState.Depleted;
+    }
+
     public void ApplyGatheredFromNetwork(bool recordStats)
     {
         TryFarmResourceLocal(recordStats);

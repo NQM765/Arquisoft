@@ -3,7 +3,7 @@
 Backend separado en dos servicios FastAPI y un paquete compartido:
 
 - `support-service`: autenticacion, usuarios, resumenes de partida y Firebase.
-- `matchmaking-service`: cola multiplayer, ciclo de partida, ready state y metadata Relay/Lobby.
+- `matchmaking-service`: cola multiplayer, ciclo de partida, ready state, metadata Relay/Lobby y host migration.
 - `shared`: CORS, seguridad, conexiones y modelos comunes.
 
 ## Estructura
@@ -76,6 +76,10 @@ Matchmaking:
 | `POST` | `/matchmaking/matches/{match_id}/join` | Unirse a una partida |
 | `GET` | `/matchmaking/matches/{match_id}` | Consultar partida |
 | `POST` | `/matchmaking/matches/{match_id}/leave` | Salir de partida |
+| `POST` | `/matchmaking/matches/{match_id}/heartbeat` | Heartbeat del host actual |
+| `POST` | `/matchmaking/matches/{match_id}/snapshot` | Guardar snapshot de estado del juego |
+| `GET` | `/matchmaking/matches/{match_id}/migration` | Consultar estado de migracion |
+| `POST` | `/matchmaking/matches/{match_id}/migration/claim` | Reclamar host con un nuevo Relay join code |
 
 Los endpoints de matchmaking requieren:
 
@@ -92,4 +96,6 @@ Authorization: Bearer <access_token>
 5. El frontend redirige al callback local de Unity con el `access_token`.
 6. Unity usa ese token en `Authorization: Bearer <access_token>` para matchmaking y resumenes.
 
-La cola esta en memoria para esta fase. Si el contenedor de `matchmaking` se reinicia, las partidas activas se pierden.
+Las partidas de matchmaking se persisten en PostgreSQL. Esto permite correr varias replicas de `matchmaking` siempre que compartan la misma base de datos, o bases sincronizadas de forma consistente entre maquinas.
+
+Para host migration, Unity guarda heartbeats y snapshots periodicos. Si el host deja de enviar heartbeat, otro jugador puede crear una nueva sesion Relay, reclamar el rol de host y restaurar el ultimo snapshot guardado.
