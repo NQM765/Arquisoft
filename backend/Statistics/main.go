@@ -18,7 +18,6 @@ func main() {
 	}
 
 	http.HandleFunc("/session-summary", createSessionSummary)
-	http.HandleFunc("/session-summary/", getSessionSummary)
 
 	port := os.Getenv("STATISTICS_SERVICE_PORT")
 	if port == "" {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -21,9 +22,9 @@ func initFirebase(ctx context.Context) error {
 		return fmt.Errorf("firebase credentials file not found: %w", err)
 	}
 
-	projectID := os.Getenv("FIREBASE_PROJECT_ID")
-	if projectID == "" {
-		return fmt.Errorf("FIREBASE_PROJECT_ID is not set")
+	projectID, err := resolveProjectID(credPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve firebase project ID: %w", err)
 	}
 
 	client, err := firestore.NewClient(ctx, projectID, option.WithCredentialsFile(credPath))
@@ -33,4 +34,28 @@ func initFirebase(ctx context.Context) error {
 
 	firestoreClient = client
 	return nil
+}
+
+func resolveProjectID(credPath string) (string, error) {
+	if id := os.Getenv("FIREBASE_PROJECT_ID"); id != "" {
+		return id, nil
+	}
+
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot read credentials file: %w", err)
+	}
+
+	var cred struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(data, &cred); err != nil {
+		return "", fmt.Errorf("cannot parse credentials file: %w", err)
+	}
+
+	if cred.ProjectID == "" {
+		return "", fmt.Errorf("project_id not found in credentials file")
+	}
+
+	return cred.ProjectID, nil
 }

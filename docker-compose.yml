@@ -15,10 +15,13 @@ services:
         condition: service_started
       matchmaking_2:
         condition: service_started
+      statistics:
+        condition: service_started
     ports:
       - "3000:3000"
       - "8000:8000"
       - "8001:8001"
+      - "8002:8002"
     networks:
       - public
       - private
@@ -149,6 +152,19 @@ services:
     environment:
       PYTHONPATH: /app_dir:/app_dir/matchmaking-service
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    networks:
+      - private
+
+  statistics:
+    build:
+      context: ./backend/Statistics
+    env_file:
+      - ./backend/.env
+    environment:
+      STATISTICS_SERVICE_PORT: "8002"
+      FIREBASE_CREDENTIALS: /app/serviceAccountKey.json
+    volumes:
+      - ./backend/support-service/config/serviceAccountKey.json:/app/serviceAccountKey.json:ro
     networks:
       - private
 

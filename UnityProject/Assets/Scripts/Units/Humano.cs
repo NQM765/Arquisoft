@@ -224,7 +224,7 @@ public abstract class Humano : MonoBehaviour
     {
         if (!navMesh.pathPending && navMesh.remainingDistance <= 2f)
         {
-            Debug.Log("Está dentro del rango deseado");
+            //Debug.Log("Está dentro del rango deseado");
             if (resourceTarget != null && resourceActionPending)
             {
                 resourceActionPending = false;

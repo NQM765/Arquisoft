@@ -10,6 +10,6 @@ RUN go mod download
 COPY . .
 RUN go build -o statistics .
 
-EXPOSE 8001
+EXPOSE 8002
 
 CMD ["./statistics"]

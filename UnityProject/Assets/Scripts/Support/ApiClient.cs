@@ -14,7 +14,10 @@ public class ApiClient : MonoBehaviour
 {
     [Header("Support API")]
     [SerializeField] string baseUrl = "https://127.0.0.1:8000";
-    [SerializeField] string sessionSummaryEndpoint = "/support/session-summary";
+
+    [Header("Statistics API")]
+    [SerializeField] string statisticsBaseUrl = "https://127.0.0.1:8002";
+    [SerializeField] string statisticsSessionSummaryEndpoint = "/session-summary";
 
     [Header("Web Login")]
     [SerializeField] string webLoginUrl = "http://localhost:3000/unity-login";
@@ -108,7 +111,8 @@ public class ApiClient : MonoBehaviour
             return;
         }
 
-        StartCoroutine(PostJsonCoroutine(sessionSummaryEndpoint, payload,
+        string url = statisticsBaseUrl.TrimEnd('/') + statisticsSessionSummaryEndpoint;
+        StartCoroutine(PostJsonCoroutine(url, statisticsBaseUrl, payload,
             onSuccess: text =>
             {
                 string message = "Sesion enviada.";
@@ -225,10 +229,10 @@ public class ApiClient : MonoBehaviour
         return cleanBase + cleanEndpoint;
     }
 
-    void ConfigureLocalCertificate(UnityWebRequest request)
+    void ConfigureLocalCertificate(UnityWebRequest request, string urlBase)
     {
         Uri uri;
-        if (Uri.TryCreate(baseUrl, UriKind.Absolute, out uri)
+        if (Uri.TryCreate(urlBase, UriKind.Absolute, out uri)
             && uri.Scheme == Uri.UriSchemeHttps
             && (uri.Host == "127.0.0.1" || uri.Host == "localhost"))
         {
@@ -404,14 +408,14 @@ public class ApiClient : MonoBehaviour
             .Replace("\"", "&quot;");
     }
 
-    IEnumerator PostJsonCoroutine<T>(string endpoint, T payload, Action<string> onSuccess, Action<string> onError)
+    IEnumerator PostJsonCoroutine<T>(string url, string certBase, T payload, Action<string> onSuccess, Action<string> onError)
     {
         string json = JsonUtility.ToJson(payload);
-        UnityWebRequest request = new UnityWebRequest(BuildUrl(endpoint), UnityWebRequest.kHttpVerbPOST);
+        UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
         request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
-        ConfigureLocalCertificate(request);
+        ConfigureLocalCertificate(request, certBase);
         AuthSession.ApplyAuthorization(request);
         request.timeout = 10;
 
