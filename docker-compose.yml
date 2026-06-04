@@ -152,6 +152,12 @@ services:
     networks:
       - private
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - private
+
 networks:
   public:
   private:
