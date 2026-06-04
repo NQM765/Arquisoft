@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 from app.models import Match
 from app.router import router as matchmaking_router
 from shared.connections.postgresql_connection import Base, engine
+from shared.consul_registration import register_service, deregister_service
 from shared.cors import configure_cors
 
 app = FastAPI(title="RTS Matchmaking API")
@@ -29,11 +30,17 @@ def on_startup():
         try:
             Base.metadata.create_all(bind=engine)
             ensure_match_schema()
-            return
+            break
         except OperationalError:
             if attempt == 10:
                 raise
             time.sleep(2)
+    register_service("matchmaking-service", 8001)
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    deregister_service(f"matchmaking-service-{socket.gethostname()}")
 
 
 def ensure_match_schema():

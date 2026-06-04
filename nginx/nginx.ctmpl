@@ -1,0 +1,67 @@
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Port $server_port;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $connection_upgrade;
+proxy_connect_timeout 300ms;
+proxy_read_timeout 60s;
+proxy_send_timeout 60s;
+proxy_next_upstream error timeout;
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    "" close;
+}
+
+upstream support_pool {
+    server 127.0.0.1:1 down;
+{{ range service "support-service" -}}
+    server {{ .Address }}:{{ .Port }};
+{{ end }}
+}
+
+upstream matchmaking_pool {
+    server 127.0.0.1:1 down;
+{{ range service "matchmaking-service" -}}
+    server {{ .Address }}:{{ .Port }};
+{{ end }}
+}
+
+server {
+    listen 3000;
+    server_name localhost 127.0.0.1;
+
+    location / {
+        proxy_pass http://web-frontend:3000;
+    }
+}
+
+server {
+    listen 8000 ssl;
+    server_name localhost 127.0.0.1;
+
+    ssl_certificate /etc/nginx/certs/local.crt;
+    ssl_certificate_key /etc/nginx/certs/local.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://support_pool;
+    }
+}
+
+server {
+    listen 8001 ssl;
+    server_name localhost 127.0.0.1;
+
+    ssl_certificate /etc/nginx/certs/local.crt;
+    ssl_certificate_key /etc/nginx/certs/local.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://matchmaking_pool;
+    }
+}

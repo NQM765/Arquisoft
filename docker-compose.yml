@@ -1,24 +1,31 @@
 services:
+  consul:
+    image: hashicorp/consul:1.19
+    ports:
+      - "8500:8500"
+    command: agent -server -bootstrap -ui -client=0.0.0.0 -bind=0.0.0.0
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   reverse-proxy:
     build:
       context: ./nginx
     depends_on:
+      consul:
+        condition: service_healthy
       web-frontend:
-        condition: service_started
-      support_1:
-        condition: service_started
-      support_2:
-        condition: service_started
-      support_3:
-        condition: service_started
-      matchmaking_1:
-        condition: service_started
-      matchmaking_2:
         condition: service_started
     ports:
       - "3000:3000"
       - "8000:8000"
       - "8001:8001"
+    environment:
+      CONSUL_HTTP_ADDR: http://consul:8500
     networks:
       - public
       - private
@@ -37,9 +44,9 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       NEXTAUTH_URL: http://localhost:3000
-      PY_BACKEND_URL: http://support_1:8000
+      PY_BACKEND_URL: http://support:8000
     depends_on:
-      support_1:
+      support:
         condition: service_started
     networks:
       - private
@@ -68,86 +75,46 @@ services:
     networks:
       - private
 
-  support_1:
+  support:
     build:
       context: ./backend
     working_dir: /app_dir/support-service
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    deploy:
+      replicas: 3
     depends_on:
       db:
+        condition: service_healthy
+      consul:
         condition: service_healthy
     env_file:
       - ./backend/.env
     environment:
       PYTHONPATH: /app_dir:/app_dir/support-service
       ENABLE_HTTPS_REDIRECT: "false"
+      CONSUL_HTTP_ADDR: http://consul:8500
     networks:
       - private
 
-  support_2:
-    build:
-      context: ./backend
-    working_dir: /app_dir/support-service
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - ./backend/.env
-    environment:
-      PYTHONPATH: /app_dir:/app_dir/support-service
-      ENABLE_HTTPS_REDIRECT: "false"
-    networks:
-      - private
-
-  support_3:
-    build:
-      context: ./backend
-    working_dir: /app_dir/support-service
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - ./backend/.env
-    environment:
-      PYTHONPATH: /app_dir:/app_dir/support-service
-      ENABLE_HTTPS_REDIRECT: "false"
-    networks:
-      - private
-
-  matchmaking_1:
+  matchmaking:
     build:
       context: ./backend
     working_dir: /app_dir/matchmaking-service
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --proxy-headers --forwarded-allow-ips="*"
+    deploy:
+      replicas: 2
     depends_on:
       db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    env_file:
-      - ./backend/.env
-    environment:
-      PYTHONPATH: /app_dir:/app_dir/matchmaking-service
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-    networks:
-      - private
-
-  matchmaking_2:
-    build:
-      context: ./backend
-    working_dir: /app_dir/matchmaking-service
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --proxy-headers --forwarded-allow-ips="*"
-    depends_on:
-      db:
-        condition: service_healthy
-      rabbitmq:
+      consul:
         condition: service_healthy
     env_file:
       - ./backend/.env
     environment:
       PYTHONPATH: /app_dir:/app_dir/matchmaking-service
+      CONSUL_HTTP_ADDR: http://consul:8500
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     networks:
       - private
