@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.cache import cache_get_snapshot, cache_set_snapshot
 from app.models import Match
 from app.schemas import (
     ClaimHostRequest,
@@ -431,6 +432,8 @@ def save_match_snapshot(
         db.add(match)
         db.commit()
         db.refresh(match)
+        # Cache-aside: populate Redis after PG commit (graceful on failure)
+        cache_set_snapshot(match_id, match.snapshot, match.snapshot_sequence)
         return _as_response(match, role="host")
 
 
@@ -508,4 +511,16 @@ def get_migration_state(match_id: str, principal: AuthPrincipal) -> dict:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
             )
         _require_player(match, principal)
+
+        # Cache-aside: try Redis first, fall back to PG on miss/error
+        cached = cache_get_snapshot(match_id)
+        cached_seq = cached.get("sequence", -1) if isinstance(cached, dict) else -1
+        cached_snap = cached.get("snapshot") if isinstance(cached, dict) else None
+        if cached_snap is not None and cached_seq >= (match.snapshot_sequence or 0):
+            match.snapshot = cached_snap
+            match.snapshot_sequence = cached_seq
+        elif match.snapshot is not None:
+            # Populate cache on miss (write behind)
+            cache_set_snapshot(match_id, match.snapshot, match.snapshot_sequence)
+
         return _as_migration_state(match)
