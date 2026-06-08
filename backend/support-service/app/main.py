@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 from app.connections.postgresql_connection import Base, engine
 from app.routers.auth import router as auth_router
 from app.routers.match import router as match_router
+from shared.consul_registration import register_service, deregister_service
 from shared.cors import configure_cors
 
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -66,8 +67,14 @@ def on_startup():
         try:
             Base.metadata.create_all(bind=engine)
             ensure_users_schema()
-            return
+            break
         except OperationalError:
             if attempt == 10:
                 raise
             time.sleep(2)
+    register_service("support-service", 8000)
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    deregister_service(f"support-service-{socket.gethostname()}")
