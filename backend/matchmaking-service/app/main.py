@@ -1,3 +1,4 @@
+import logging
 import socket
 import time
 
@@ -5,13 +6,18 @@ from fastapi import FastAPI
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
+from app.circuit_breaker import CircuitBreaker
 from app.models import Match
 from app.router import router as matchmaking_router
 from shared.connections.postgresql_connection import Base, engine
 from shared.consul_registration import register_service, deregister_service
 from shared.cors import configure_cors
 
+logger = logging.getLogger(__name__)
 app = FastAPI(title="RTS Matchmaking API")
+
+# Circuit Breaker para RabbitMQ
+rabbit_breaker = CircuitBreaker(failure_threshold=3, timeout=30, name="rabbitmq")
 
 configure_cors(app)
 app.include_router(matchmaking_router)
@@ -20,7 +26,13 @@ app.include_router(matchmaking_router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "component": "matchmaking", "instance": socket.gethostname()}
+    breaker_state = rabbit_breaker.state.value
+    return {
+        "status": "degraded" if breaker_state != "CLOSED" else "ok",
+        "component": "matchmaking",
+        "instance": socket.gethostname(),
+        "circuitBreaker": breaker_state
+    }
 
 
 @app.on_event("startup")

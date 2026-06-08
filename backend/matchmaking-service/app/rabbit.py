@@ -12,21 +12,34 @@ Los mensajes se publican con delivery_mode=2 (persistentes).
 """
 
 import json
+import logging
 import os
+import socket
 
 import pika
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUEUE_NAME = "matchmaking.available"
+logger = logging.getLogger(__name__)
 
 
 def _get_channel():
-    """Abre una conexión y canal nuevos. Úsalo dentro de un bloque try/finally."""
-    params = pika.URLParameters(RABBITMQ_URL)
-    connection = pika.BlockingConnection(params)
-    channel = connection.channel()
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
-    return connection, channel
+    """Abre una conexión con timeout a RabbitMQ. Para ser usado con Circuit Breaker."""
+    try:
+        params = pika.ConnectionParameters(
+            host="rabbitmq",
+            port=5672,
+            connection_attempts=1,
+            socket_timeout=2,  # Timeout de 2s para fallar rápido
+            blocked_connection_timeout=10,
+        )
+        connection = pika.BlockingConnection([params])
+        channel = connection.channel()
+        channel.queue_declare(queue=QUEUE_NAME, durable=True)
+        return connection, channel
+    except (pika.exceptions.AMQPConnectionError, socket.timeout) as e:
+        logger.error(f"[RabbitMQ] Connection failed: {e}")
+        raise ConnectionError(f"Failed to connect to RabbitMQ: {e}")
 
 
 def publish_match_available(match_id: str, relay_join_code: str) -> None:

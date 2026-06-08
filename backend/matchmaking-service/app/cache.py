@@ -46,3 +46,26 @@ def cache_get_snapshot(match_id: str) -> dict[str, Any] | None:
     except Exception as exc:
         logger.warning("[CACHE] Failed to read cached snapshot for %s: %s", match_id, exc)
         return None
+
+
+def cache_recent_matches(limit: int = 10) -> list[dict[str, Any]]:
+    """Obtiene últimas partidas como fallback cuando CB está OPEN"""
+    try:
+        client = _get_client()
+        key = "matchmaking:recent_matches"
+        cached = client.lrange(key, 0, limit - 1)
+        return [json.loads(m) for m in cached]
+    except Exception as exc:
+        logger.warning("[CACHE] Failed to read recent matches: %s", exc)
+        return []
+
+
+def add_to_recent_matches(match: dict[str, Any]) -> None:
+    """Agrega partida al cache para usar como fallback"""
+    try:
+        client = _get_client()
+        key = "matchmaking:recent_matches"
+        client.lpush(key, json.dumps(match))
+        client.ltrim(key, 0, 9)  # Mantener últimas 10
+    except Exception as exc:
+        logger.warning("[CACHE] Failed to add recent match: %s", exc)

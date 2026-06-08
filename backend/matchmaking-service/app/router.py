@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, status
+import logging
 
+from app.cache import cache_recent_matches, add_to_recent_matches
+from app.circuit_breaker import CircuitBreakerOpenException
 from app.schemas import (
     ClaimHostRequest,
     CreateMatchRequest,
