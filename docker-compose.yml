@@ -121,11 +121,15 @@ services:
   statistics:
     build:
       context: ./backend/Statistics
+    depends_on:
+      consul:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     environment:
       STATISTICS_SERVICE_PORT: "8002"
       FIREBASE_CREDENTIALS: /app/serviceAccountKey.json
+      CONSUL_HTTP_ADDR: http://consul:8500
     volumes:
       - ./backend/support-service/config/serviceAccountKey.json:/app/serviceAccountKey.json:ro
     networks:
